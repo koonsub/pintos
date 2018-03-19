@@ -36,18 +36,22 @@ void argument_stack(char **parse, int count , void **esp)
 
   
   
-  // printf("LOG [%s] esp %x\n",__func__,esp);
-  for(;count > 0; count--)
+  // printf("LOG [%s] esp %x\n",__func__,*esp);
+  for(; count > 0; count-- )
   {
-    argv_size = sizeof(parse[count-1]);
+    argv_size = strlen( parse[count-1] );
+    printf("\x1b[31mLOG [%s] argv_size %d\n\x1b[0m",__func__,argv_size);
 
     *esp -= 1;
+    printf("LOG [%s] esp %x\n",__func__,*esp);
     *(char*)(*esp) = '\0';
 
     for(;argv_size > 0; argv_size--)
     {
       *esp -= 1;
+      printf("LOG [%s] esp %x\n",__func__,*esp);
       *(char*)*esp = parse[ count - 1 ][ argv_size - 1 ];
+      // printf("LOG [%s] data %c\n",__func__,*(char*)*esp);
     }
     argv[count-1] = *esp;
 
@@ -131,7 +135,7 @@ start_process (void *file_name_)
       parse = realloc( parse , sizeof(char*) * (parse_size << 1) );
     }
     *(parse + count) = token ;
-    // printf("LOG [%s] : token %s\n",__func__,parse[count]);
+    printf("LOG [%s] :  %s\n",__func__,parse[count]);
     count++;
   }
 
