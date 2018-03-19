@@ -20,6 +20,63 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+void argument_stack(char **parse, int count , void **esp);
+
+
+void argument_stack(char **parse, int count , void **esp)
+{
+  char** argv;
+  int argc;
+  
+
+  argc = count;
+  argv = calloc(argc,sizeof(char*));
+
+  int argv_size = 0;
+
+  
+  
+  // printf("LOG [%s] esp %x\n",__func__,esp);
+  for(;count > 0; count--)
+  {
+    argv_size = sizeof(parse[count-1]);
+
+    *esp -= 1;
+    *(char*)(*esp) = '\0';
+
+    for(;argv_size > 0; argv_size--)
+    {
+      *esp -= 1;
+      *(char*)*esp = parse[ count - 1 ][ argv_size - 1 ];
+    }
+    argv[count-1] = *esp;
+
+  }
+
+  *esp -= 1;
+  *(char*)*esp = '\0'; // word - align
+  
+  *esp -= 4;
+  *(char**)*esp = (char *)0;
+  
+  for(count = argc; count > 0; count--)
+  {
+    *esp -= 4;
+    *(char**)*esp = argv[count-1];
+  }
+
+  *esp -= 4;
+  *(char***)*esp = *esp + 4;
+
+  *esp -= 4;
+  *(int*)*esp = argc;
+
+  *esp -= 4;
+  *(void**)*esp = (void *)0;
+ 
+
+  free(parse);
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,6 +87,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  char *save_ptr;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -37,6 +95,9 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+
+  /* koo : parse thread name at file_name */
+  strtok_r(file_name," ",&save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
@@ -54,14 +115,38 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-/*  */
+  /* koo : */
+  int parse_size = 2;
+  char **parse = malloc( sizeof(char*) * parse_size );
+  int count = 0;
+  char *save_ptr,*token;
+  
+  /* koo : parse argument  */
+  for(token = strtok_r(file_name," ",&save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr))
+  {
+    if( count > parse_size )
+    {
+      printf("LOG [%s] : parse size %d\n",__func__,parse_size);
+      parse = realloc( parse , sizeof(char*) * (parse_size << 1) );
+    }
+    *(parse + count) = token ;
+    // printf("LOG [%s] : token %s\n",__func__,parse[count]);
+    count++;
+  }
 
+
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  /* koo : */
+  argument_stack( parse , count , &if_.esp );
+  hex_dump( if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
